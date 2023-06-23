@@ -1,3 +1,10 @@
+use ansi_to_tui::{IntoLine, IntoText};
+// use ratatui::text::Text;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{Style as SyntectStyle, ThemeSet};
+use syntect::parsing::SyntaxSet;
+use syntect::util::as_24_bit_terminal_escaped;
+
 use crate::cursor::CursorMove;
 use crate::highlight::LineHighlighter;
 use crate::history::{Edit, EditKind, History};
@@ -7,10 +14,10 @@ use crate::scroll::Scrolling;
 use crate::search::Search;
 use crate::tui::layout::Alignment;
 use crate::tui::style::{Modifier, Style};
-use crate::tui::text::Spans;
+use crate::tui::text::{Line, Text};
 use crate::tui::widgets::{Block, Widget};
 use crate::util::spaces;
-use crate::widget::{Renderer, Viewport};
+use crate::widget::{Renderer, SyntaxRenderer, Viewport};
 use crate::word::{find_word_end_forward, find_word_start_backward};
 
 /// A type to manage state of textarea.
@@ -36,6 +43,7 @@ use crate::word::{find_word_end_forward, find_word_start_backward};
 #[derive(Clone)]
 pub struct TextArea<'a> {
     lines: Vec<String>,
+    text: Text<'a>,
     block: Option<Block<'a>>,
     style: Style,
     cursor: (usize, usize), // 0-base
@@ -131,8 +139,20 @@ impl<'a> TextArea<'a> {
             lines.push(String::new());
         }
 
+        let ss = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
+        let syntax = ss.find_syntax_by_extension("rs").unwrap();
+        let mut h = HighlightLines::new(syntax, &ts.themes["base16-eighties.dark"]);
+
+        let mut escaped = Vec::new();
+        for line in &lines {
+            let ranges: Vec<(SyntectStyle, &str)> = h.highlight_line(line, &ss).unwrap();
+            escaped.push(as_24_bit_terminal_escaped(&ranges[..], true));
+        }
+
         Self {
             lines,
+            text: escaped.join("\n").into_text().unwrap(),
             block: None,
             style: Style::default(),
             cursor: (0, 0),
@@ -142,12 +162,17 @@ impl<'a> TextArea<'a> {
             cursor_line_style: Style::default().add_modifier(Modifier::UNDERLINED),
             line_number_style: None,
             viewport: Viewport::default(),
-            cursor_style: Style::default().add_modifier(Modifier::REVERSED),
+            cursor_style: Style::default().add_modifier(Modifier::REVERSED | Modifier::SLOW_BLINK),
             yank: String::new(),
             #[cfg(feature = "search")]
             search: Search::default(),
             alignment: Alignment::Left,
         }
+    }
+
+    #[inline]
+    pub fn text(&self) -> &Text<'a> {
+        &self.text
     }
 
     /// Handle a key input with default key mappings. For default key mappings, see the table in
@@ -928,6 +953,7 @@ impl<'a> TextArea<'a> {
     /// ```
     pub fn move_cursor(&mut self, m: CursorMove) {
         if let Some(cursor) = m.next_cursor(self.cursor, &self.lines, &self.viewport) {
+            // log::debug!("move cursor: {:?} -> {:?}", self.cursor, cursor);
             self.cursor = cursor;
         }
     }
@@ -974,7 +1000,7 @@ impl<'a> TextArea<'a> {
         }
     }
 
-    pub(crate) fn line_spans<'b>(&'b self, line: &'b str, row: usize, lnum_len: u8) -> Spans<'b> {
+    pub(crate) fn line_spans<'b>(&'b self, line: &'b str, row: usize, lnum_len: u8) -> Line<'b> {
         let mut hl = LineHighlighter::new(line, self.cursor_style, self.tab_len);
 
         if let Some(style) = self.line_number_style {
@@ -992,6 +1018,37 @@ impl<'a> TextArea<'a> {
 
         hl.into_spans()
     }
+
+    // pub(crate) fn syntax_line_spans<'b>(
+    //     &'b self,
+    //     mut h: &mut HighlightLines,
+    //     s: &SyntaxSet,
+    //     line: &'b str,
+    //     row: usize,
+    //     lnum_len: u8,
+    // ) -> Spans<'b> {
+    //     let mut hl = LineHighlighter::new(line, self.cursor_style, self.tab_len);
+
+    //     if let Some(style) = self.line_number_style {
+    //         hl.line_number(row, lnum_len, style);
+    //     }
+
+    //     if row == self.cursor.0 {
+    //         hl.cursor_line(self.cursor.1, self.cursor_line_style);
+    //     }
+
+    //     let ranges: Vec<(SyntectStyle, &str)> = h.highlight_line(line, s).unwrap();
+    //     let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
+
+    //     hl.push_spans(escaped.into_spans().unwrap().0);
+
+    //     #[cfg(feature = "search")]
+    //     if let Some(matches) = self.search.matches(line) {
+    //         hl.search(matches, self.search.style);
+    //     }
+
+    //     hl.into_spans()
+    // }
 
     /// Build a tui-rs widget to render the current state of the textarea. The widget instance returned from this
     /// method can be rendered with [`tui::terminal::Frame::render_widget`].
@@ -1021,6 +1078,10 @@ impl<'a> TextArea<'a> {
     /// ```
     pub fn widget(&'a self) -> impl Widget + 'a {
         Renderer::new(self)
+    }
+
+    pub fn syntax_widget(&'a self, theme: &'a str) -> impl Widget + 'a {
+        SyntaxRenderer::new(self, theme)
     }
 
     /// Set the style of textarea. By default, textarea is not styled.

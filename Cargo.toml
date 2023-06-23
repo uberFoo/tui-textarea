@@ -14,15 +14,10 @@ repository = "https://github.com/rhysd/tui-textarea"
 readme = "README.md"
 categories = ["text-editors", "text-processing"]
 keywords = ["tui", "textarea", "editor", "input", "edit", "ratatui"]
-include = [
-    "/src",
-    "/examples",
-    "/README.md",
-    "/LICENSE.txt",
-]
+include = ["/src", "/examples", "/README.md", "/LICENSE.txt"]
 
 [features]
-default = ["crossterm"]
+default = []
 # Features to use tui-rs
 crossterm = ["dep:crossterm", "tui/crossterm"]
 termion = ["dep:termion", "tui/termion"]
@@ -41,7 +36,11 @@ termion = { version = "1.5", optional = true }
 tui = { version = "0.19", default-features = false, optional = true }
 arbitrary = { version = "1", features = ["derive"], optional = true }
 crossterm-026 = { package = "crossterm", version = "0.26", optional = true }
-ratatui = { version = "0.20.1", default-features = false, optional = true }
+# ratatui = { version = "0.20.1", default-features = false, optional = true }
+ratatui = { git = "https://github.com/uberFoo/ratatui", default-features = false, optional = true }
+syntect = "5.0.0"
+ansi-to-tui = { git = "https://github.com/uberFoo/ansi-to-tui" }
+log = "0.4.17"
 
 [[example]]
 name = "minimal"
@@ -84,9 +83,7 @@ name = "ratatui_termion"
 required-features = ["ratatui-termion"]
 
 [workspace]
-members = [
-    "bench",
-]
+members = ["bench"]
 
 [profile.bench]
 lto = "thin"

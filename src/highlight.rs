@@ -1,5 +1,5 @@
 use crate::tui::style::Style;
-use crate::tui::text::{Span, Spans};
+use crate::tui::text::{Line, Span};
 use crate::util::{num_digits, spaces};
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -86,6 +86,10 @@ impl<'a> LineHighlighter<'a> {
             .push(Span::styled(format!("{}{} ", pad, row + 1), style));
     }
 
+    pub fn push_spans(&mut self, spans: impl IntoIterator<Item = Span<'a>>) {
+        self.spans.extend(spans);
+    }
+
     pub fn cursor_line(&mut self, cursor_col: usize, style: Style) {
         if let Some((start, c)) = self.line.char_indices().nth(cursor_col) {
             self.boundaries
@@ -107,7 +111,7 @@ impl<'a> LineHighlighter<'a> {
         }
     }
 
-    pub fn into_spans(self) -> Spans<'a> {
+    pub fn into_spans(self) -> Line<'a> {
         let Self {
             line,
             mut spans,
@@ -123,7 +127,7 @@ impl<'a> LineHighlighter<'a> {
             if cursor_at_end {
                 spans.push(Span::styled(" ", cursor_style));
             }
-            return Spans::from(spans);
+            return Line::from(spans);
         }
 
         boundaries.sort_unstable_by(|(l, i), (r, j)| match i.cmp(j) {
@@ -159,7 +163,7 @@ impl<'a> LineHighlighter<'a> {
                 if cursor_at_end {
                     spans.push(Span::styled(" ", cursor_style));
                 }
-                return Spans::from(spans);
+                return Line::from(spans);
             }
         }
     }
